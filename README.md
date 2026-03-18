@@ -1,6 +1,6 @@
 # CoS-plus-plus
 
-The codes structure is designed for Imperial College HPC.
+The codes structure is designed for Imperial College HPC but it can be easily adapted for other pbs bash based HPC systems in other universties and supercomputer clusters.
 
 They are designed to be very simple to use to do parameter sweeping against thermodynamical quantites.
 
