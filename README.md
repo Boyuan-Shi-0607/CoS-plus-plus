@@ -4,7 +4,7 @@ The codes structure is designed for Imperial College HPC.
 
 They are designed to be very simple to use to do parameter sweeping against thermodynamical quantites.
 
-One just runs parameter_sweep_dd.sh the simulations will run automatically.
+One just runs parameter_sweep_*.sh the simulations will run automatically. You would need to change what you would like to compute and what parameters to use like Hubbard U, temperature T ... 
 
 You need to take some time to change to your username and know the codes structure (not bs218), and familiarize yourself with basic linux commands used there.
 
