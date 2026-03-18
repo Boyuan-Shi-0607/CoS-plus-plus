@@ -10,4 +10,6 @@ You need to take some time to change to your username and know the codes structu
 
 I will add more notes on how to use the codes in the future.
 
-Do not hesitate to contact me if you have questions/comments. Email address: boyuanshi0607@gmail.com
+Do not hesitate to contact me if you have questions/comments. I am happy to assist with problems like modifying makfile for your own supercomputer cluster, what this or that parameter mean in details, how to control simulation accuracy, how to single out header files to integrate with your own projects ...
+
+Email address: boyuanshi0607@gmail.com
