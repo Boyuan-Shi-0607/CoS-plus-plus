@@ -1,0 +1,112 @@
+#include <iostream>
+#include <vector>
+#include <chrono>
+#include <iomanip>
+#include <cstdint>
+#include <string>
+
+// Include the typed DAG header I provided earlier
+#include "dag_generator.h"
+
+// Include your parameters header (uses dag_cache, initialize_all_dags, etc.)
+#include "../main/parameters.h"
+
+// -------------------- Simple LCG (matches your Python) --------------------
+class SimpleLCG {
+public:
+    explicit SimpleLCG(uint32_t seed) : state_(seed & 0xffffffffu) {}
+    // float in [0,1)
+    double next_float() {
+        state_ = (state_ * 1103515245u + 12345u) & 0xffffffffu;
+        return static_cast<double>(state_) / 4294967296.0; // 2^32
+    }
+private:
+    uint32_t state_;
+};
+
+// rows * cols, row-major flatten
+static std::vector<double> generate_matrix_flat(int rows, int cols, uint32_t seed) {
+    SimpleLCG lcg(seed);
+    std::vector<double> mat;
+    mat.reserve(static_cast<size_t>(rows) * cols);
+    for (int i = 0; i < rows; ++i)
+        for (int j = 0; j < cols; ++j)
+            mat.push_back(lcg.next_float());
+    return mat;
+}
+
+static std::vector<double> generate_shift_close(int N_f, uint32_t seed) {
+    SimpleLCG lcg(seed);
+    std::vector<double> s(N_f);
+    for (int i = 0; i < N_f; ++i) s[i] = lcg.next_float();
+    return s;
+}
+
+int main() {
+    using std::cout;
+    using std::endl;
+    using Real = typed_dag::Real;
+
+    const int n   = 7;
+    const int N_f = 3;
+
+    // -------------------- Build DAGs (orders 2..7, N_f=3) --------------------
+    auto t0 = std::chrono::high_resolution_clock::now();
+    initialize_all_dags(); // uses typed_dag::build_dag_typed(order, 3) per your modified function
+    auto t1 = std::chrono::high_resolution_clock::now();
+
+    // -------------------- Generate test data (LCG) --------------------
+    // Choose deterministic seeds so runs match across languages.
+    const uint32_t seeds_mats[N_f] = {12345u, 23456u, 34567u};
+    const uint32_t seed_shift      = 45678u;
+
+    std::vector<std::vector<Real>> A_matrices; // flavour × (n*n)
+    A_matrices.reserve(N_f);
+    for (int f = 0; f < N_f; ++f) {
+        auto flat = generate_matrix_flat(n, n, seeds_mats[f]);
+        // Convert to Real if your Real typedef differs (here it’s already double)
+        A_matrices.emplace_back(flat.begin(), flat.end());
+    }
+
+    std::vector<Real> shift_close;
+    {
+        auto sh = generate_shift_close(N_f, seed_shift);
+        shift_close.assign(sh.begin(), sh.end());
+    }
+
+    // -------------------- Compute sink for order = 4 --------------------
+    const int order_to_test = n;
+    auto dag_it = dag_cache.find(order_to_test);
+    if (dag_it == dag_cache.end()) {
+        std::cerr << "DAG for order " << order_to_test << " not found in cache.\n";
+        return 1;
+    }
+    const typed_dag::DAGData& dag = dag_it->second;
+
+    auto t2 = std::chrono::high_resolution_clock::now();
+    Real sink_value = typed_dag::compute_sink_value_fast(dag, A_matrices, n, shift_close);
+    auto t3 = std::chrono::high_resolution_clock::now();
+
+    // -------------------- Timing + results --------------------
+    auto build_ms  = std::chrono::duration_cast<std::chrono::microseconds>(t1 - t0).count() / 1000.0;
+    auto eval_ms   = std::chrono::duration_cast<std::chrono::microseconds>(t3 - t2).count() / 1000.0;
+
+    cout << std::fixed << std::setprecision(9);
+    cout << "\n=== Typed DAG test (n = " << n << ", N_f = " << N_f << ") ===\n";
+    cout << "DAG build (orders 2..7): " << build_ms << " ms\n";
+    cout << "Order " << order_to_test << " sink value: " << sink_value << "\n";
+    cout << "Fast evaluation time: " << eval_ms << " ms\n";
+
+    // Optionally, dump first few inputs to double-check determinism
+    cout << "\nFirst 4 entries of each A_matrix (row-major):\n";
+    for (int f = 0; f < N_f; ++f) {
+        cout << "  A[" << f << "]: ";
+        for (int k = 0; k < 4; ++k) cout << A_matrices[f][k] << (k+1<4? ", ":"");
+        cout << "\n";
+    }
+    cout << "Shift close values: ";
+    for (int f = 0; f < N_f; ++f) cout << shift_close[f] << (f+1<N_f? ", ":"");
+    cout << "\n";
+
+    return 0;
+}

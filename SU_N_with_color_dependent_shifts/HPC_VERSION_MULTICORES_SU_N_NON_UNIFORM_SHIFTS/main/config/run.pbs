@@ -1,0 +1,39 @@
+#!/bin/sh
+#PBS -N Aphrodite
+#PBS -l walltime=08:00:00
+#PBS -l select=1:ncpus=100:mem=5gb
+#PBS -o output_o.txt
+#PBS -e output_e.txt
+
+module load tools/prod
+module load GCCcore/12.2.0
+module load zlib/1.2.12-GCCcore-12.2.0
+module load binutils/2.39-GCCcore-12.2.0
+module load GCC/12.2.0
+module load numactl/2.0.16-GCCcore-12.2.0
+module load XZ/5.2.7-GCCcore-12.2.0
+module load libxml2/2.10.3-GCCcore-12.2.0
+module load libpciaccess/0.17-GCCcore-12.2.0
+module load hwloc/2.8.0-GCCcore-12.2.0
+module load OpenSSL/1.1
+module load libevent/2.1.12-GCCcore-12.2.0
+module load UCX/1.13.1-GCCcore-12.2.0
+module load libfabric/1.16.1-GCCcore-12.2.0
+module load PMIx/4.2.2-GCCcore-12.2.0
+module load UCC/1.1.0-GCCcore-12.2.0
+module load OpenMPI/4.1.4-GCC-12.2.0
+module load gompi/2022b
+module load Szip/2.1.1-GCCcore-12.2.0
+module load HDF5/1.14.0-gompi-2022b
+
+cd "$PBS_O_WORKDIR" || { echo "Failure"; exit 1; }
+cd ..
+
+# Build the project
+make -j 1
+
+# Run the executable
+./Aphrodite
+
+# clean exe files after execution
+rm Aphrodite

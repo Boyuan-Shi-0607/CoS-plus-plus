@@ -1,0 +1,144 @@
+#!/bin/sh
+#PBS -N submit_all
+#PBS -l walltime=08:00:00
+#PBS -l select=1:ncpus=1:mem=2gb
+
+# Before creating data files,
+# first copy and paste folder and change parameters.
+
+# Path to the folder to be copied.
+SOURCE_FOLDER="$HOME/HPC_VERSION_MULTICORES_SU_N_NON_UNIFORM_SHIFTS"
+
+# Define the path to the parameter file.
+PARAM_FILE="$PBS_O_WORKDIR/params.txt"
+
+# Load parameters from params.txt
+while IFS='=' read -r key value; do
+    if [ -n "$key" ] && [ -n "$value" ]; then
+        export "$key=$value"
+    fi
+done < "$PARAM_FILE"
+
+UPPER_DEST="N1_${N1}_N2_${N2}_U_${U}_beta_${BETA}_mu_${MU}_alpha_shifts_${ALPHA_SHIFT_VEC}"
+
+if [ "$DENSITY_MODE" = "true" ]; then
+    UPPER_DEST="${UPPER_DEST}_density"
+fi
+if [ "$LNZ_MODE" = "true" ]; then
+    UPPER_DEST="${UPPER_DEST}_lnZ"
+fi
+
+# Define the base path that will be used consistently throughout the script
+BASE_PATH="$HOME/SU_N_DATA/$UPPER_DEST"
+
+# Check if the folder exists; if not, create it
+if [ ! -d "$BASE_PATH" ]; then
+    mkdir -p "$BASE_PATH"
+else
+    echo "Using existing folder"
+fi
+
+# Construct the base destination folder name from the parameters.
+BASE_DEST="N1_${N1}_N2_${N2}_U_${U}_beta_${BETA}_mu_${MU}_alpha_${ALPHA_SHIFT_VEC}_RG_MCMC_${RG_MCMC}_start_set_${START_ORDER}_end_set_${END_ORDER}_MCMC_Mode_${MCMC_mode}"
+
+if [ "$DENSITY_MODE" = "true" ]; then
+    BASE_DEST="${BASE_DEST}_density"
+fi
+if [ "$LNZ_MODE" = "true" ]; then
+    BASE_DEST="${BASE_DEST}_lnZ"
+fi
+
+DEST_FOLDER="$BASE_DEST"
+
+# If a folder with the same name exists, append _1, _2, etc.
+COUNT=1
+while [ -d "$BASE_PATH/$DEST_FOLDER" ]; do
+    DEST_FOLDER="${BASE_DEST}_${COUNT}"
+    COUNT=$((COUNT+1))
+done
+
+# Full path to the destination folder
+FULL_DEST_PATH="$BASE_PATH/$DEST_FOLDER"
+
+# Copy the source folder and parameter file to the destination.
+cp -r "$SOURCE_FOLDER" "$FULL_DEST_PATH"
+cp -r "$PARAM_FILE" "$FULL_DEST_PATH/"
+
+echo "Folder $SOURCE_FOLDER copied and renamed to $DEST_FOLDER"
+
+cd "$FULL_DEST_PATH" || { echo "Failure"; exit 1; }
+
+MAIN_CPP="src/main.cpp"
+if [ -f "$MAIN_CPP" ]; then
+    sed -i "s|#define USE_RG_MCMC 0|#define USE_RG_MCMC ${RG_MCMC}|" "$MAIN_CPP"
+    echo "Updated $MAIN_CPP"
+else
+  echo "$MAIN_CPP does not exist."
+fi
+
+j=$START_ORDER
+# Loop through each folder at each order
+while [ "${j}" -le "$END_ORDER" ]; do
+  SOURCE_SUB_FOLDER="main"
+  DEST_SUB_FOLDER="set_${j}"
+
+  mkdir -p "$DEST_SUB_FOLDER"
+  cp -r "$SOURCE_SUB_FOLDER/config" "$DEST_SUB_FOLDER/"
+  cp -r "$SOURCE_SUB_FOLDER/logs" "$DEST_SUB_FOLDER/"
+  cp -r "$SOURCE_SUB_FOLDER/parameters.h" "$DEST_SUB_FOLDER/"
+  cp -r "$SOURCE_SUB_FOLDER/makefile" "$DEST_SUB_FOLDER/"
+
+  PARAMETERS_HEADER="$DEST_SUB_FOLDER/parameters.h"
+  PBS_FILE="$DEST_SUB_FOLDER/config/run.pbs"
+  TIME_CPP=$(eval echo \${TIMES_CPP_IN_H_ORDER_$j})
+  # Check if run.pbs exists
+  if [ -f "$PBS_FILE" ]; then
+    sed -i "s|#PBS -l walltime=08:00:00|#PBS -l walltime=${TIME_CPP}:00:00|" "$PBS_FILE"
+    sed -i "s|#PBS -l select=1:ncpus=100:mem=5gb|#PBS -l select=1:ncpus=${CORES_CPP}:mem=${MEMORY_CPP_IN_GB}gb|" "$PBS_FILE"
+  fi
+
+  # Check if parameters.h exists in the sub-folder
+  if [ -f "$PARAMETERS_HEADER" ]; then
+    # Correct path to ensure consistency
+    MAIN_PATH="/rds/general/user/bs218/home/SU_N_DATA/$UPPER_DEST/$DEST_FOLDER/set_${j}";
+    SAVE_PATH="/rds/general/user/bs218/home/SU_N_DATA/$UPPER_DEST/$DEST_FOLDER/set_${j}";
+
+    # Update parameters in parameters.h
+    sed -i "s|const char\* main_path = \"/users\";|const char* main_path = \"$MAIN_PATH\";|" "$PARAMETERS_HEADER"
+    sed -i "s|const char\* save_path = \"/users\";|const char* save_path = \"$SAVE_PATH\";|" "$PARAMETERS_HEADER"
+    sed -i "s|inline int set_num = 0;|inline int set_num = $j;|" "$PARAMETERS_HEADER"
+    echo "Updated $PARAMETERS_HEADER"
+  else
+    echo "$PARAMETERS_HEADER does not exist."
+  fi
+  j=$((j + 1))
+done
+
+k=$START_ORDER
+# Loop through directories from START_DIR to END_DIR
+while [ "$k" -le "$END_ORDER" ]; do
+    # Use the correct path
+    DIR="$FULL_DEST_PATH/set_$k"
+    echo "Processing directory $DIR"
+
+    # Change to the directory
+    cd "$DIR/config" || { echo "Failed to change to directory $DIR/config"; exit 1; }
+
+    job_id_cpp=$(qsub run.pbs)
+
+    cd "$DIR" || { echo "Failed to change to directory $DIR"; exit 1; }
+    # Uncomment if you want to enable these job dependencies
+    # job_id_combine=$(qsub -W depend=afterany:"$job_id_cpp" combine.pbs)
+
+    cd "$DIR/config" || { echo "Failed to change to directory $DIR/config"; exit 1; }
+    # Uncomment if you want to enable these job dependencies
+    # job_id_normality=$(qsub -W depend=afterok:"$job_id_combine" run_normality.pbs)
+
+    cd "$DIR" || { echo "Failed to change to directory $DIR"; exit 1; }
+    # Uncomment if you want to enable this job dependency
+    # qsub -W depend=afterok:"$job_id_normality" remove_logs_and_config.pbs
+
+    # Go back to the original directory
+    cd "$FULL_DEST_PATH"
+    k=$((k + 1))
+done
