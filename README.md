@@ -1,7 +1,5 @@
 # CoS-plus-plus
 
-<img width="1536" height="1024" alt="ChatGPT Image Mar 18, 2026 at 02_47_39 PM" src="https://github.com/user-attachments/assets/452e5fe7-09d6-4940-82e5-648b6f8e31f6" />
-
 The codes structure is designed for Imperial College HPC.
 
 They are designed to be very simple to use to do parameter sweeping against thermodynamical quantites.
